@@ -284,28 +284,42 @@ const ReceiptScanner = {
         const progressFill = $('#progress-fill');
         const progressText = $('#progress-text');
         $('#scan-progress').style.display = 'block';
+        progressFill.style.width = '20%';
+        progressText.textContent = 'Invio a Gemini AI...';
 
         try {
-            const worker = await Tesseract.createWorker('ita', 1, {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        const pct = Math.round(m.progress * 100);
-                        progressFill.style.width = pct + '%';
-                        progressText.textContent = `Analisi in corso... ${pct}%`;
-                    }
-                }
+            const settings = Settings.get();
+            if (!settings.apiUrl) {
+                toast('Configura l\'URL di Google Script nelle impostazioni', 'error');
+                return null;
+            }
+
+            // Extract base64 part
+            const base64 = imageSource.split(',')[1];
+
+            const response = await fetch(settings.apiUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'scan',
+                    image: base64
+                })
             });
 
-            const { data: { text } } = await worker.recognize(imageSource);
-            await worker.terminate();
+            const result = await response.json();
 
-            progressFill.style.width = '100%';
-            progressText.textContent = 'Completato!';
-
-            return this.parseReceipt(text);
+            if (result.success && result.analysis && !result.analysis.error) {
+                progressFill.style.width = '100%';
+                progressText.textContent = 'Analisi completata!';
+                return {
+                    rawText: 'Analisi effettuata con successo tramite AI.',
+                    ...result.analysis
+                };
+            } else {
+                throw new Error(result.analysis?.error || 'Errore API Gemini');
+            }
         } catch (err) {
-            console.error('OCR Error:', err);
-            toast('Errore durante la scansione', 'error');
+            console.error('Scan Error:', err);
+            toast('Errore: API Gemini non configurata correttamente', 'error');
             return null;
         }
     },

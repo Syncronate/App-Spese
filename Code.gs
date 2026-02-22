@@ -11,6 +11,8 @@
    ============================================ */
 
 const SHEET_NAME = 'Spese';
+const GEMINI_API_KEY = 'INSERISCI_QUI_LA_TUA_CHIAVE_GEMINI'; // Se non l'hai già fatto nelle impostazioni online
+const PROMPT = "Analizza questo scontrino e restituisci SOLO un oggetto JSON con questi campi: {store: string, date: YYYY-MM-DD, total: number, items: [{name: string, price: number, category: string}]}. Usa le categorie: frutta_verdura, carne_pesce, latticini, pane_cereali, bevande, casa_pulizia, ristorante, trasporti, igiene, abbigliamento, tecnologia, altro.";
 
 function getSheet() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -77,6 +79,11 @@ function doPost(e) {
       }
       return jsonResponse({ success: true });
     }
+
+    if (action === 'scan') {
+      const result = scanReceipt(payload.image);
+      return jsonResponse({ success: true, analysis: result });
+    }
     
   } catch (err) {
     return jsonResponse({ success: false, error: err.message });
@@ -87,4 +94,39 @@ function jsonResponse(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function scanReceipt(base64Image) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  
+  const payload = {
+    contents: [{
+      parts: [
+        { text: PROMPT },
+        {
+          inline_data: {
+            mime_type: "image/jpeg",
+            data: base64Image
+          }
+        }
+      ]
+    }],
+    generationConfig: {
+      response_mime_type: "application/json"
+    }
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload)
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const result = JSON.parse(response.getContentText());
+    return JSON.parse(result.candidates[0].content.parts[0].text);
+  } catch (e) {
+    return { error: e.message };
+  }
 }
