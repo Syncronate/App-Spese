@@ -132,13 +132,22 @@ function scanReceipt(base64Image) {
   const options = {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify(payload)
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
   };
 
   try {
     const response = UrlFetchApp.fetch(url, options);
     const text = response.getContentText();
     const result = JSON.parse(text);
+    
+    if (response.getResponseCode() !== 200) {
+      return { 
+        error: "Errore Gemini API (" + response.getResponseCode() + ")", 
+        details: result.error?.message || "Errore sconosciuto",
+        keyUsed: apiKey.substring(0, 4) + "****"
+      };
+    }
     
     if (result.candidates && result.candidates[0].content.parts[0].text) {
       let jsonStr = result.candidates[0].content.parts[0].text;
