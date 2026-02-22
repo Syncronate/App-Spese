@@ -148,7 +148,7 @@ const Settings = {
         name1: 'Alberto',
         name2: 'Valentina',
         budget: 1500,
-        theme: 'dark',
+        theme: 'light',
     },
     get() {
         const saved = localStorage.getItem('spesa_settings');
