@@ -319,7 +319,7 @@ const ReceiptScanner = {
             }
         } catch (err) {
             console.error('Scan Error:', err);
-            toast('Errore: API Gemini non configurata correttamente', 'error');
+            toast(`Errore scansione: ${err.message}`, 'error');
             return null;
         }
     },

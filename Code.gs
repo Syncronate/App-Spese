@@ -124,9 +124,17 @@ function scanReceipt(base64Image) {
 
   try {
     const response = UrlFetchApp.fetch(url, options);
-    const result = JSON.parse(response.getContentText());
-    return JSON.parse(result.candidates[0].content.parts[0].text);
+    const text = response.getContentText();
+    const result = JSON.parse(text);
+    
+    if (result.candidates && result.candidates[0].content.parts[0].text) {
+      let jsonStr = result.candidates[0].content.parts[0].text;
+      // Remove markdown code blocks if present
+      jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(jsonStr);
+    }
+    return { error: "Formato risposta Gemini non valido", raw: text };
   } catch (e) {
-    return { error: e.message };
+    return { error: "Eccezione Apps Script: " + e.message };
   }
 }
