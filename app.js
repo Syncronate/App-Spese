@@ -234,14 +234,21 @@ const DataStore = {
         const settings = Settings.get();
         if (!settings.apiUrl) return;
         try {
-            await fetch(settings.apiUrl, {
+            const res = await fetch(settings.apiUrl, {
                 method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({ action, ...data, items: JSON.stringify(data.items || []) }),
             });
+
+            // In Google Apps Script with web app, we might not get a success status back 
+            // easily due to redirects, but removing 'no-cors' allows us to see if the 
+            // request at least was attempted correctly. 
+            // Note: GAS prefers text/plain for POST to avoid pre-flight CORS checks in some cases.
+
+            console.log('Sync tentato:', action);
         } catch (e) {
-            console.warn('Sync errore:', e);
+            console.error('Sync errore:', e);
+            toast('Errore di sincronizzazione con Google Sheets', 'error');
         }
     },
 
