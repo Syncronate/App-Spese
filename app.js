@@ -145,8 +145,8 @@ function showLoading(show = true) {
 const Settings = {
     _defaults: {
         apiUrl: 'https://script.google.com/macros/s/AKfycbx6P29pl0Q4HpR1Dy9mNUuxV8C3gGAhv-uqGvrF0K4SUIMJvDEXf9pbOtJEUV3dceOQ/exec',
-        name1: 'Io',
-        name2: 'Partner',
+        name1: 'Alberto',
+        name2: 'Valentina',
         budget: 1500,
         theme: 'dark',
     },
