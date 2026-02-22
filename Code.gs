@@ -110,7 +110,8 @@ function scanReceipt(base64Image) {
     return { error: "API Key mancante in Code.gs. Inseriscila nella variabile GEMINI_API_KEY o nelle Proprietà del Progetto." };
   }
   
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // Usiamo gemini-1.5-flash-8b che è più leggero e ha limiti di quota più generosi nel piano gratuito
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
   
   const payload = {
     contents: [{
