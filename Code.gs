@@ -11,8 +11,16 @@
    ============================================ */
 
 const SHEET_NAME = 'Spese';
-const GEMINI_API_KEY = 'INSERISCI_QUI_LA_TUA_CHIAVE_GEMINI'; // Se non l'hai già fatto nelle impostazioni online
 const PROMPT = "Analizza questo scontrino e restituisci SOLO un oggetto JSON con questi campi: {store: string, date: YYYY-MM-DD, total: number, items: [{name: string, price: number, category: string}]}. Usa le categorie: frutta_verdura, carne_pesce, latticini, pane_cereali, bevande, casa_pulizia, ristorante, trasporti, igiene, abbigliamento, tecnologia, altro.";
+
+function getApiKey() {
+  // 1. Prova a prenderla dalle proprietà del progetto (consigliato)
+  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (key && key !== 'INSERISCI_QUI_LA_TUA_CHIAVE_GEMINI') return key;
+  
+  // 2. Ritorna la costante hardcoded (come fallback)
+  return 'INSERISCI_QUI_LA_TUA_CHIAVE_GEMINI'; 
+}
 
 function getSheet() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -97,7 +105,12 @@ function jsonResponse(obj) {
 }
 
 function scanReceipt(base64Image) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const apiKey = getApiKey();
+  if (apiKey === 'INSERISCI_QUI_LA_TUA_CHIAVE_GEMINI') {
+    return { error: "API Key mancante in Code.gs. Inseriscila nella variabile GEMINI_API_KEY o nelle Proprietà del Progetto." };
+  }
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   
   const payload = {
     contents: [{
