@@ -144,7 +144,7 @@ function showLoading(show = true) {
 
 const Settings = {
     _defaults: {
-        apiUrl: 'https://script.google.com/macros/s/AKfycbx6P29pl0Q4HpR1Dy9mNUuxV8C3gGAhv-uqGvrF0K4SUIMJvDEXf9pbOtJEUV3dceOQ/exec',
+        apiUrl: 'https://script.google.com/macros/s/AKfycbzvxUK4RuJNYU3c104aBOtNU8AGEpRU30-VNNGJ58riWM9hS72491B0fGZByxiR4Mns/exec',
         name1: 'Alberto',
         name2: 'Valentina',
         budget: 1500,
