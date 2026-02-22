@@ -697,8 +697,11 @@ const Charts = {
         const allData = Stats.monthlyTotals(expenses, year);
         const ioExpenses = expenses.filter(e => e.person === 'io');
         const partnerExpenses = expenses.filter(e => e.person === 'partner');
+        const comuneExpenses = expenses.filter(e => e.person === 'comune');
+
         const ioData = Stats.monthlyTotals(ioExpenses, year);
         const partnerData = Stats.monthlyTotals(partnerExpenses, year);
+        const comuneData = Stats.monthlyTotals(comuneExpenses, year);
 
         this._instances['monthly'] = new Chart(ctx, {
             type: 'bar',
@@ -716,6 +719,13 @@ const Charts = {
                         label: Settings.get().name2,
                         data: partnerData,
                         backgroundColor: 'rgba(253, 121, 168, 0.7)',
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    },
+                    {
+                        label: 'Comune',
+                        data: comuneData,
+                        backgroundColor: 'rgba(108, 92, 231, 0.7)',
                         borderRadius: 6,
                         borderSkipped: false,
                     },
@@ -771,10 +781,10 @@ const Charts = {
         this._instances['person'] = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: [settings.name1, settings.name2],
+                labels: [settings.name1, settings.name2, 'Comune'],
                 datasets: [{
-                    data: [data['io'] || 0, data['partner'] || 0],
-                    backgroundColor: ['rgba(0, 206, 201, 0.8)', 'rgba(253, 121, 168, 0.8)'],
+                    data: [data['io'] || 0, data['partner'] || 0, data['comune'] || 0],
+                    backgroundColor: ['rgba(0, 206, 201, 0.8)', 'rgba(253, 121, 168, 0.8)', 'rgba(108, 92, 231, 0.8)'],
                     borderWidth: 0,
                     spacing: 3,
                 }]
