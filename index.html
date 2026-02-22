@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpesaTracker</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">💰 SpesaTracker</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-view="dashboard"><span
+                        class="nav-icon">📊</span><span>Dashboard</span></a>
+                <a href="#" class="nav-item" data-view="add"><span class="nav-icon">➕</span><span>Aggiungi
+                        Spesa</span></a>
+                <a href="#" class="nav-item" data-view="scan"><span class="nav-icon">📷</span><span>Scontrino</span></a>
+                <a href="#" class="nav-item" data-view="history"><span
+                        class="nav-icon">📋</span><span>Storico</span></a>
+                <a href="#" class="nav-item" data-view="analysis"><span
+                        class="nav-icon">📈</span><span>Analisi</span></a>
+                <a href="#" class="nav-item" data-view="settings"><span
+                        class="nav-icon">⚙️</span><span>Impostazioni</span></a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="person-filter">
+                    <button class="person-btn active" data-person="all">👥 Tutti</button>
+                    <button class="person-btn" data-person="io">🙋 Io</button>
+                    <button class="person-btn" data-person="partner">💑 Partner</button>
+                </div>
+            </div>
+        </aside>
+        <header id="mobile-header">
+            <button id="menu-toggle">☰</button>
+            <h1>💰 SpesaTracker</h1>
+        </header>
+        <main id="main-content">
+            <!-- DASHBOARD -->
+            <section id="view-dashboard" class="view active">
+                <div class="view-header">
+                    <h2>Dashboard</h2>
+                    <div class="date-filter">
+                        <select id="filter-month"></select>
+                        <select id="filter-year"></select>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card" id="stat-total">
+                        <div class="stat-icon">💶</div>
+                        <div class="stat-info"><span class="stat-label">Spesa Mese</span><span
+                                class="stat-value">€0</span><span class="stat-change"></span></div>
+                    </div>
+                    <div class="stat-card" id="stat-avg">
+                        <div class="stat-icon">📅</div>
+                        <div class="stat-info"><span class="stat-label">Media Giornaliera</span><span
+                                class="stat-value">€0</span><span class="stat-change"></span></div>
+                    </div>
+                    <div class="stat-card" id="stat-top">
+                        <div class="stat-icon">🏆</div>
+                        <div class="stat-info"><span class="stat-label">Categoria Top</span><span
+                                class="stat-value">-</span><span class="stat-change"></span></div>
+                    </div>
+                    <div class="stat-card" id="stat-count">
+                        <div class="stat-icon">🧾</div>
+                        <div class="stat-info"><span class="stat-label">Transazioni</span><span
+                                class="stat-value">0</span><span class="stat-change"></span></div>
+                    </div>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-card wide">
+                        <h3>Andamento Mensile</h3>
+                        <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Per Categoria</h3>
+                        <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Io vs Partner</h3>
+                        <div class="chart-wrap"><canvas id="chart-person"></canvas></div>
+                    </div>
+                    <div class="chart-card wide">
+                        <h3>Trend Giornaliero</h3>
+                        <div class="chart-wrap"><canvas id="chart-daily"></canvas></div>
+                    </div>
+                </div>
+                <div class="recent-section">
+                    <h3>Ultime Transazioni</h3>
+                    <div id="recent-list"></div>
+                </div>
+            </section>
+            <!-- ADD EXPENSE -->
+            <section id="view-add" class="view">
+                <div class="view-header">
+                    <h2>Aggiungi Spesa</h2>
+                </div>
+                <div class="form-container">
+                    <form id="expense-form">
+                        <div class="form-row">
+                            <div class="form-group"><label>Data</label><input type="date" id="exp-date" required></div>
+                            <div class="form-group"><label>Persona</label><select id="exp-person">
+                                    <option value="io">Io</option>
+                                    <option value="partner">Partner</option>
+                                </select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Categoria</label><select id="exp-category"></select></div>
+                            <div class="form-group"><label>Importo (€)</label><input type="number" id="exp-amount"
+                                    step="0.01" min="0" required></div>
+                        </div>
+                        <div class="form-group"><label>Descrizione</label><input type="text" id="exp-description"
+                                placeholder="Es: Spesa settimanale"></div>
+                        <div class="form-group"><label>Negozio</label><input type="text" id="exp-store"
+                                placeholder="Es: Conad, Esselunga..."></div>
+                        <div class="form-group"><label>Note</label><textarea id="exp-notes" rows="2"></textarea></div>
+                        <div class="items-section">
+                            <h4>Dettaglio Articoli <button type="button" class="btn-sm" id="add-item-btn">+
+                                    Articolo</button></h4>
+                            <div id="items-list"></div>
+                        </div>
+                        <div class="form-actions"><button type="submit" class="btn btn-primary">💾 Salva</button><button
+                                type="reset" class="btn btn-ghost">Reset</button></div>
+                    </form>
+                </div>
+            </section>
+            <!-- SCAN -->
+            <section id="view-scan" class="view">
+                <div class="view-header">
+                    <h2>Scansiona Scontrino</h2>
+                </div>
+                <div class="scan-container">
+                    <div id="upload-zone" class="upload-zone">
+                        <span class="upload-icon">📷</span>
+                        <p>Trascina o clicca per caricare scontrino</p>
+                        <small>JPG, PNG • Puoi anche usare la fotocamera</small>
+                        <input type="file" id="scan-input" accept="image/*" capture="environment">
+                    </div>
+                    <div id="scan-preview" class="scan-preview" style="display:none">
+                        <img id="preview-img" src="" alt="">
+                        <div class="preview-actions"><button class="btn btn-primary" id="start-scan-btn">🔍
+                                Analizza</button><button class="btn btn-ghost" id="reset-scan-btn">↩ Cambia</button>
+                        </div>
+                    </div>
+                    <div id="scan-progress" style="display:none">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <p id="progress-text">Elaborazione...</p>
+                    </div>
+                    <div id="scan-results" style="display:none">
+                        <h3>Risultati</h3>
+                        <details class="ocr-raw-toggle">
+                            <summary>Testo grezzo OCR</summary>
+                            <pre id="ocr-text"></pre>
+                        </details>
+                        <div class="extracted-fields">
+                            <div class="form-row">
+                                <div class="form-group"><label>Negozio</label><input type="text" id="scan-store"></div>
+                                <div class="form-group"><label>Data</label><input type="date" id="scan-date"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Totale €</label><input type="number" id="scan-total"
+                                        step="0.01"></div>
+                                <div class="form-group"><label>Persona</label><select id="scan-person">
+                                        <option value="io">Io</option>
+                                        <option value="partner">Partner</option>
+                                    </select></div>
+                            </div>
+                        </div>
+                        <h4>Articoli Trovati</h4>
+                        <div id="scan-items-list"></div>
+                        <div class="form-actions"><button class="btn btn-primary" id="save-scan-btn">💾 Salva
+                                Tutto</button><button class="btn btn-ghost" id="discard-scan-btn">✕ Annulla</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- HISTORY -->
+            <section id="view-history" class="view">
+                <div class="view-header">
+                    <h2>Storico</h2>
+                    <div class="header-actions"><input type="text" id="search-input" placeholder="🔍 Cerca..."><button
+                            class="btn btn-ghost" id="export-btn">📥 CSV</button></div>
+                </div>
+                <div class="filters-bar">
+                    <select id="hist-month">
+                        <option value="">Mese</option>
+                    </select>
+                    <select id="hist-year">
+                        <option value="">Anno</option>
+                    </select>
+                    <select id="hist-cat">
+                        <option value="">Categoria</option>
+                    </select>
+                    <select id="hist-person">
+                        <option value="">Persona</option>
+                        <option value="io">Io</option>
+                        <option value="partner">Partner</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table id="expense-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="date">Data</th>
+                                <th data-sort="person">Chi</th>
+                                <th data-sort="category">Categoria</th>
+                                <th>Descrizione</th>
+                                <th data-sort="amount">€</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expense-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="table-footer"><span id="table-info"></span></div>
+            </section>
+            <!-- ANALYSIS -->
+            <section id="view-analysis" class="view">
+                <div class="view-header">
+                    <h2>Analisi & Previsioni</h2>
+                </div>
+                <div class="analysis-grid">
+                    <div class="chart-card wide">
+                        <h3>📈 Previsione Prossimi 3 Mesi</h3>
+                        <div class="chart-wrap"><canvas id="chart-prediction"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>📊 Anno su Anno</h3>
+                        <div class="chart-wrap"><canvas id="chart-yoy"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>🕐 Per Giorno Settimana</h3>
+                        <div class="chart-wrap"><canvas id="chart-weekday"></canvas></div>
+                    </div>
+                    <div class="insight-card wide">
+                        <h3>💡 Insights Automatici</h3>
+                        <div id="insights-list"></div>
+                    </div>
+                </div>
+            </section>
+            <!-- SETTINGS -->
+            <section id="view-settings" class="view">
+                <div class="view-header">
+                    <h2>Impostazioni</h2>
+                </div>
+                <div class="form-container">
+                    <div class="form-group"><label>URL Google Apps Script</label><input type="url" id="set-api"
+                            placeholder="https://script.google.com/macros/s/.../exec"><small>Lascia vuoto per usare
+                            localStorage</small></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Nome Utente 1</label><input type="text" id="set-name1"
+                                value="Io"></div>
+                        <div class="form-group"><label>Nome Utente 2</label><input type="text" id="set-name2"
+                                value="Partner"></div>
+                    </div>
+                    <div class="form-group"><label>Budget Mensile (€)</label><input type="number" id="set-budget"
+                            value="1500"></div>
+                    <div class="form-group"><label>Tema</label><select id="set-theme">
+                            <option value="dark">🌙 Scuro</option>
+                            <option value="light">☀️ Chiaro</option>
+                        </select></div>
+                    <div class="form-actions"><button class="btn btn-primary" id="save-settings-btn">💾 Salva
+                            Impostazioni</button></div>
+                    <hr>
+                    <h3>Dati</h3>
+                    <div class="form-actions"><button class="btn btn-ghost" id="import-btn">📤 Importa
+                            JSON</button><button class="btn btn-ghost" id="export-json-btn">📥 Esporta
+                            JSON</button><button class="btn btn-danger" id="clear-btn">🗑️ Cancella Tutto</button></div>
+                    <input type="file" id="import-input" accept=".json" style="display:none">
+                </div>
+            </section>
+        </main>
+    </div>
+    <!-- EDIT MODAL -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Modifica Spesa</h3><button class="modal-close" id="modal-close-btn">&times;</button>
+            </div>
+            <form id="edit-form"><input type="hidden" id="edit-id">
+                <div class="form-row">
+                    <div class="form-group"><label>Data</label><input type="date" id="edit-date"></div>
+                    <div class="form-group"><label>Persona</label><select id="edit-person">
+                            <option value="io">Io</option>
+                            <option value="partner">Partner</option>
+                        </select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Categoria</label><select id="edit-category"></select></div>
+                    <div class="form-group"><label>Importo</label><input type="number" id="edit-amount" step="0.01">
+                    </div>
+                </div>
+                <div class="form-group"><label>Descrizione</label><input type="text" id="edit-description"></div>
+                <div class="form-group"><label>Negozio</label><input type="text" id="edit-store"></div>
+                <div class="form-group"><label>Note</label><textarea id="edit-notes" rows="2"></textarea></div>
+                <div class="form-actions"><button type="submit" class="btn btn-primary">💾 Salva</button><button
+                        type="button" class="btn btn-danger" id="delete-btn">🗑️ Elimina</button></div>
+            </form>
+        </div>
+    </div>
+    <div id="toast-container"></div>
+    <div id="loading-overlay" style="display:none">
+        <div class="spinner"></div>
+        <p>Caricamento...</p>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
