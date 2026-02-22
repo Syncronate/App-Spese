@@ -240,6 +240,10 @@ const DataStore = {
                 body: JSON.stringify({ action, ...data, items: JSON.stringify(data.items || []) }),
             });
 
+            if (!res.ok && res.status !== 0) { // status 0 can happen with redirects sometimes
+                throw new Error(`Server returned status ${res.status}`);
+            }
+
             // In Google Apps Script with web app, we might not get a success status back 
             // easily due to redirects, but removing 'no-cors' allows us to see if the 
             // request at least was attempted correctly. 

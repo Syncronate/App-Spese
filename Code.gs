@@ -11,6 +11,7 @@
    ============================================ */
 
 const SHEET_NAME = 'Spese';
+const SPREADSHEET_ID = '1koeAMVShobVrNNsCIeakrL2T7PoVjsUOPcA2Q_4Q76k'; // ID fornito dall'utente
 const PROMPT = "Analizza questo scontrino e restituisci SOLO un oggetto JSON con questi campi: {store: string, date: YYYY-MM-DD, total: number, items: [{name: string, price: number, category: string}]}. Usa le categorie: frutta_verdura, carne_pesce, latticini, pane_cereali, bevande, casa_pulizia, ristorante, trasporti, igiene, abbigliamento, tecnologia, altro.";
 
 function getApiKey() {
@@ -23,7 +24,19 @@ function getApiKey() {
 }
 
 function getSheet() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  let ss;
+  try {
+    ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    // Se non esiste, prendi il primo foglio disponibile
+    sheet = ss.getSheets()[0];
+  }
+  return sheet;
 }
 
 function doGet(e) {
