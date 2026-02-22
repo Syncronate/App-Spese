@@ -705,13 +705,18 @@ textarea {
 }
 
 .person-badge.io {
-    background: var(--teal-glow);
-    color: var(--teal);
+    background: var(--accent-light);
+    color: var(--accent);
 }
 
 .person-badge.partner {
-    background: rgba(253, 121, 168, .15);
-    color: var(--pink);
+    background: #ffeaa7;
+    color: #d6a31c;
+}
+
+.person-badge.comune {
+    background: #e3f2fd;
+    color: #1976d2;
 }
 
 .action-btn {

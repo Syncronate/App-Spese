@@ -31,6 +31,7 @@
             <div class="sidebar-footer">
                 <div class="person-filter">
                     <button class="person-btn active" data-person="all">👥 Tutti</button>
+                    <button class="person-btn" data-person="comune">💳 Comune</button>
                     <button class="person-btn" data-person="io">🙋 Alberto</button>
                     <button class="person-btn" data-person="partner">💑 Valentina</button>
                 </div>
@@ -105,6 +106,7 @@
                         <div class="form-row">
                             <div class="form-group"><label>Data</label><input type="date" id="exp-date" required></div>
                             <div class="form-group"><label>Persona</label><select id="exp-person">
+                                    <option value="comune">Conto Comune</option>
                                     <option value="io">Alberto</option>
                                     <option value="partner">Valentina</option>
                                 </select></div>
@@ -168,6 +170,7 @@
                                 <div class="form-group"><label>Totale €</label><input type="number" id="scan-total"
                                         step="0.01"></div>
                                 <div class="form-group"><label>Persona</label><select id="scan-person">
+                                        <option value="comune">Conto Comune</option>
                                         <option value="io">Alberto</option>
                                         <option value="partner">Valentina</option>
                                     </select></div>
@@ -198,8 +201,9 @@
                     <select id="hist-cat">
                         <option value="">Categoria</option>
                     </select>
-                    <select id="hist-person">
-                        <option value="">Persona</option>
+                    <select id="hist-person" class="sidebar-select">
+                        <option value="">Tutte le persone</option>
+                        <option value="comune">Conto Comune</option>
                         <option value="io">Alberto</option>
                         <option value="partner">Valentina</option>
                     </select>
@@ -289,6 +293,7 @@
                 <div class="form-row">
                     <div class="form-group"><label>Data</label><input type="date" id="edit-date"></div>
                     <div class="form-group"><label>Persona</label><select id="edit-person">
+                            <option value="comune">Conto Comune</option>
                             <option value="io">Alberto</option>
                             <option value="partner">Valentina</option>
                         </select></div>

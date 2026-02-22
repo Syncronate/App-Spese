@@ -1362,7 +1362,7 @@ const UI = {
         const settings = Settings.get();
         tbody.innerHTML = expenses.map(e => {
             const cat = getCatInfo(e.category);
-            const personName = e.person === 'io' ? settings.name1 : settings.name2;
+            const personName = e.person === 'comune' ? 'Comune' : (e.person === 'io' ? settings.name1 : settings.name2);
             return `
             <tr>
                 <td>${new Date(e.date).toLocaleDateString('it-IT')}</td>
@@ -1584,7 +1584,7 @@ const UI = {
 
         container.innerHTML = recent.map(e => {
             const cat = getCatInfo(e.category);
-            const personName = e.person === 'io' ? settings.name1 : settings.name2;
+            const personName = e.person === 'comune' ? 'Comune' : (e.person === 'io' ? settings.name1 : settings.name2);
             return `
             <div class="recent-item">
                 <div class="recent-left">
