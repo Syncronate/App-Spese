@@ -25,6 +25,7 @@
                         class="nav-icon">📋</span><span>Storico</span></a>
                 <a href="#" class="nav-item" data-view="analysis"><span
                         class="nav-icon">📈</span><span>Analisi</span></a>
+                <a href="#" class="nav-item" data-view="quotes"><span class="nav-icon">P</span><span>Preventivi</span></a>
                 <a href="#" class="nav-item" data-view="settings"><span
                         class="nav-icon">⚙️</span><span>Impostazioni</span></a>
             </nav>
@@ -248,6 +249,130 @@
                         <div id="insights-list"></div>
                     </div>
                 </div>
+            </section>
+            <!-- QUOTES -->
+            <section id="view-quotes" class="view">
+                <div class="view-header">
+                    <h2>Preventivi</h2>
+                    <div class="header-actions">
+                        <select id="quote-status-filter">
+                            <option value="">Tutti gli stati</option>
+                            <option value="valutazione">In valutazione</option>
+                            <option value="scelto">Scelto</option>
+                            <option value="in_corso">In corso</option>
+                            <option value="chiuso">Chiuso</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="quote-summary-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">#</div>
+                        <div class="stat-info"><span class="stat-label">Bisogni aperti</span><span
+                                class="stat-value" id="quote-stat-needs">0</span><span class="stat-change"
+                                id="quote-stat-quotes">0 preventivi</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">B</div>
+                        <div class="stat-info"><span class="stat-label">Budget totale</span><span
+                                class="stat-value" id="quote-stat-budget">EUR0</span><span
+                                class="stat-change">Somma dei budget</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">S</div>
+                        <div class="stat-info"><span class="stat-label">Scelte / migliori stime</span><span
+                                class="stat-value" id="quote-stat-selected">EUR0</span><span class="stat-change"
+                                id="quote-stat-delta">Delta budget</span></div>
+                    </div>
+                </div>
+                <div class="quotes-layout">
+                    <div class="quote-panel">
+                        <h3>Nuovo bisogno</h3>
+                        <form id="need-form">
+                            <input type="hidden" id="need-id">
+                            <div class="form-group"><label>Titolo</label><input type="text" id="need-title"
+                                    placeholder="Es: Cucina, vasca con doccia" required></div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Area</label><select id="need-area">
+                                        <option value="casa">Casa</option>
+                                        <option value="ristrutturazione">Ristrutturazione</option>
+                                        <option value="arredo">Arredo</option>
+                                        <option value="impianti">Impianti</option>
+                                        <option value="altro">Altro</option>
+                                    </select></div>
+                                <div class="form-group"><label>Stato</label><select id="need-status">
+                                        <option value="valutazione">In valutazione</option>
+                                        <option value="scelto">Scelto</option>
+                                        <option value="in_corso">In corso</option>
+                                        <option value="chiuso">Chiuso</option>
+                                    </select></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Budget indicativo</label><input type="number"
+                                        id="need-budget" step="0.01" min="0"></div>
+                                <div class="form-group"><label>Data target</label><input type="date"
+                                        id="need-target-date"></div>
+                            </div>
+                            <div class="form-group"><label>Note / criteri decisionali</label><textarea id="need-notes"
+                                    rows="3" placeholder="Es: tempi brevi, garanzia, materiali, inclusioni"></textarea>
+                            </div>
+                            <div class="form-actions"><button type="submit" class="btn btn-primary"
+                                    id="save-need-btn">Salva bisogno</button><button type="button" class="btn btn-ghost"
+                                    id="reset-need-btn">Nuovo</button></div>
+                        </form>
+                    </div>
+                    <div class="quote-panel">
+                        <h3>Aggiungi preventivo</h3>
+                        <form id="quote-form">
+                            <input type="hidden" id="quote-id">
+                            <div class="form-group"><label>Bisogno</label><select id="quote-need" required></select>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Fornitore</label><input type="text"
+                                        id="quote-supplier" placeholder="Es: Cucine Rossi" required></div>
+                                <div class="form-group"><label>Importo</label><input type="number" id="quote-amount"
+                                        step="0.01" min="0" required></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Data preventivo</label><input type="date"
+                                        id="quote-date"></div>
+                                <div class="form-group"><label>Valido fino al</label><input type="date"
+                                        id="quote-valid-until"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Qualita percepita (1-5)</label><input type="number"
+                                        id="quote-quality" min="1" max="5" step="1" value="3"></div>
+                                <div class="form-group"><label>Tempi consegna (giorni)</label><input type="number"
+                                        id="quote-delivery-days" min="0" step="1"></div>
+                            </div>
+                            <div class="form-group"><label>Incluso</label><textarea id="quote-included" rows="2"
+                                    placeholder="Montaggio, trasporto, materiali..."></textarea></div>
+                            <div class="form-group"><label>Escluso / rischi</label><textarea id="quote-excluded"
+                                    rows="2" placeholder="Opere murarie, smaltimento, extra..."></textarea></div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Contatto / link</label><input type="text"
+                                        id="quote-contact" placeholder="Telefono, email o link"></div>
+                                <div class="form-group"><label>Stato</label><select id="quote-status">
+                                        <option value="ricevuto">Ricevuto</option>
+                                        <option value="da_chiarire">Da chiarire</option>
+                                        <option value="preferito">Preferito</option>
+                                        <option value="scartato">Scartato</option>
+                                    </select></div>
+                            </div>
+                            <div class="form-group"><label>Note</label><textarea id="quote-notes" rows="2"></textarea>
+                            </div>
+                            <div class="form-actions"><button type="submit" class="btn btn-primary"
+                                    id="save-quote-btn">Salva preventivo</button><button type="button"
+                                    class="btn btn-ghost" id="reset-quote-btn">Nuovo</button></div>
+                        </form>
+                    </div>
+                </div>
+                <div class="quote-toolbar">
+                    <input type="text" id="quote-search" placeholder="Cerca bisogno, fornitore, note...">
+                    <button class="btn btn-ghost" id="export-quotes-btn">Esporta JSON</button>
+                    <button class="btn btn-ghost" id="import-quotes-btn">Importa JSON</button>
+                    <input type="file" id="import-quotes-input" accept=".json" style="display:none">
+                </div>
+                <div id="quotes-list" class="quotes-list"></div>
             </section>
             <!-- SETTINGS -->
             <section id="view-settings" class="view">

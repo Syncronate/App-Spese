@@ -11,6 +11,7 @@
    ============================================ */
 
 const SHEET_NAME = 'Spese';
+const QUOTES_SHEET_NAME = 'Preventivi';
 const SPREADSHEET_ID = '1koeAMVShobVrNNsCIeakrL2T7PoVjsUOPcA2Q_4Q76k'; // ID fornito dall'utente
 const PROMPT = "Analizza questo scontrino e restituisci SOLO un oggetto JSON con questi campi: {store: string, date: YYYY-MM-DD, total: number, items: [{name: string, price: number, category: string}]}. Usa le categorie: frutta_verdura, carne_pesce, latticini, pane_cereali, bevande, casa_pulizia, ristorante, trasporti, igiene, abbigliamento, tecnologia, altro.";
 
@@ -39,6 +40,33 @@ function getSheet() {
   return sheet;
 }
 
+function getQuotesSheet() {
+  let ss;
+  try {
+    ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+
+  let sheet = ss.getSheetByName(QUOTES_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(QUOTES_SHEET_NAME);
+    sheet.appendRow([
+      'ID',
+      'Titolo',
+      'Area',
+      'Stato',
+      'Budget',
+      'Data Target',
+      'Note',
+      'Preventivi JSON',
+      'Creato il',
+      'Aggiornato il',
+    ]);
+  }
+  return sheet;
+}
+
 function doGet(e) {
   const action = e.parameter.action || 'getAll';
   
@@ -47,6 +75,16 @@ function doGet(e) {
     const data = sheet.getDataRange().getValues();
     data.shift(); // Remove header row
     
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, data }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === 'getQuotes') {
+    const sheet = getQuotesSheet();
+    const data = sheet.getDataRange().getValues();
+    data.shift();
+
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, data }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -105,10 +143,58 @@ function doPost(e) {
       const result = scanReceipt(payload.image);
       return jsonResponse({ success: true, analysis: result });
     }
+
+    if (action === 'quoteNeedAdd') {
+      const quotesSheet = getQuotesSheet();
+      quotesSheet.appendRow(quoteNeedRow(payload));
+      return jsonResponse({ success: true });
+    }
+
+    if (action === 'quoteNeedUpdate') {
+      const quotesSheet = getQuotesSheet();
+      const data = quotesSheet.getDataRange().getValues();
+      let updated = false;
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] === payload.id) {
+          quotesSheet.getRange(i + 1, 1, 1, 10).setValues([quoteNeedRow(payload)]);
+          updated = true;
+          break;
+        }
+      }
+      if (!updated) quotesSheet.appendRow(quoteNeedRow(payload));
+      return jsonResponse({ success: true });
+    }
+
+    if (action === 'quoteNeedDelete') {
+      const quotesSheet = getQuotesSheet();
+      const data = quotesSheet.getDataRange().getValues();
+      for (let i = data.length - 1; i >= 1; i--) {
+        if (data[i][0] === payload.id) {
+          quotesSheet.deleteRow(i + 1);
+          break;
+        }
+      }
+      return jsonResponse({ success: true });
+    }
     
   } catch (err) {
     return jsonResponse({ success: false, error: err.message });
   }
+}
+
+function quoteNeedRow(payload) {
+  return [
+    payload.id,
+    payload.title || '',
+    payload.area || 'casa',
+    payload.status || 'valutazione',
+    payload.budget || 0,
+    payload.targetDate || '',
+    payload.notes || '',
+    payload.quotes || '[]',
+    payload.createdAt || new Date().toISOString(),
+    payload.updatedAt || new Date().toISOString(),
+  ];
 }
 
 function jsonResponse(obj) {

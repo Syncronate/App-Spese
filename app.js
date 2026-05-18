@@ -120,6 +120,9 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const fmt = (n) => '€' + Number(n).toFixed(2);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const today = () => new Date().toISOString().split('T')[0];
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[ch]));
 
 function getCatInfo(catId) {
     return CATEGORIES.find(c => c.id === catId) || CATEGORIES[CATEGORIES.length - 1];
@@ -264,6 +267,203 @@ const DataStore = {
     exportData() {
         return JSON.stringify(this._cache, null, 2);
     }
+};
+
+// ═══════════════════════════════════════════
+//  QUOTES STORE
+// ═══════════════════════════════════════════
+
+const QuoteStore = {
+    _cache: [],
+    _key: 'spesa_quotes',
+
+    async load() {
+        const settings = Settings.get();
+        if (settings.apiUrl) {
+            try {
+                const res = await fetch(settings.apiUrl + '?action=getQuotes');
+                const json = await res.json();
+                if (json.success) {
+                    this._cache = json.data.map(row => ({
+                        id: row[0],
+                        title: row[1],
+                        area: row[2] || 'casa',
+                        status: row[3] || 'valutazione',
+                        budget: parseFloat(row[4]) || 0,
+                        targetDate: row[5] || '',
+                        notes: row[6] || '',
+                        quotes: row[7] ? JSON.parse(row[7]) : [],
+                        createdAt: row[8] || '',
+                        updatedAt: row[9] || '',
+                    }));
+                    this._saveLocal();
+                    return this.getAll();
+                }
+            } catch (e) {
+                console.warn('Preventivi Google Sheets non disponibili, uso localStorage', e);
+            }
+        }
+
+        const local = localStorage.getItem(this._key);
+        this._cache = local ? JSON.parse(local) : [];
+        return this.getAll();
+    },
+
+    getAll() {
+        return this._cache.map(need => ({
+            ...need,
+            quotes: Array.isArray(need.quotes) ? [...need.quotes] : [],
+        }));
+    },
+
+    addNeed(need) {
+        const record = {
+            id: need.id || uid(),
+            title: need.title,
+            area: need.area || 'casa',
+            status: need.status || 'valutazione',
+            budget: Number(need.budget) || 0,
+            targetDate: need.targetDate || '',
+            notes: need.notes || '',
+            quotes: need.quotes || [],
+            createdAt: need.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        this._cache.push(record);
+        this._saveLocal();
+        this._syncToSheets('quoteNeedAdd', record);
+        return record;
+    },
+
+    updateNeed(need) {
+        const idx = this._cache.findIndex(n => n.id === need.id);
+        if (idx < 0) return null;
+        this._cache[idx] = {
+            ...this._cache[idx],
+            title: need.title,
+            area: need.area,
+            status: need.status,
+            budget: Number(need.budget) || 0,
+            targetDate: need.targetDate || '',
+            notes: need.notes || '',
+            updatedAt: new Date().toISOString(),
+        };
+        this._saveLocal();
+        this._syncToSheets('quoteNeedUpdate', this._cache[idx]);
+        return this._cache[idx];
+    },
+
+    removeNeed(id) {
+        this._cache = this._cache.filter(n => n.id !== id);
+        this._saveLocal();
+        this._syncToSheets('quoteNeedDelete', { id });
+    },
+
+    addQuote(needId, quote) {
+        const need = this._cache.find(n => n.id === needId);
+        if (!need) return null;
+        const record = {
+            id: quote.id || uid(),
+            supplier: quote.supplier,
+            amount: Number(quote.amount) || 0,
+            date: quote.date || today(),
+            validUntil: quote.validUntil || '',
+            quality: Number(quote.quality) || 3,
+            deliveryDays: Number(quote.deliveryDays) || 0,
+            included: quote.included || '',
+            excluded: quote.excluded || '',
+            contact: quote.contact || '',
+            status: quote.status || 'ricevuto',
+            notes: quote.notes || '',
+            selected: Boolean(quote.selected),
+            createdAt: quote.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        need.quotes = Array.isArray(need.quotes) ? need.quotes : [];
+        need.quotes.push(record);
+        need.updatedAt = new Date().toISOString();
+        this._saveLocal();
+        this._syncToSheets('quoteNeedUpdate', need);
+        return record;
+    },
+
+    updateQuote(needId, quote) {
+        const need = this._cache.find(n => n.id === needId);
+        if (!need || !Array.isArray(need.quotes)) return null;
+        const idx = need.quotes.findIndex(q => q.id === quote.id);
+        if (idx < 0) return null;
+        need.quotes[idx] = {
+            ...need.quotes[idx],
+            supplier: quote.supplier,
+            amount: Number(quote.amount) || 0,
+            date: quote.date || today(),
+            validUntil: quote.validUntil || '',
+            quality: Number(quote.quality) || 3,
+            deliveryDays: Number(quote.deliveryDays) || 0,
+            included: quote.included || '',
+            excluded: quote.excluded || '',
+            contact: quote.contact || '',
+            status: quote.status || 'ricevuto',
+            notes: quote.notes || '',
+            updatedAt: new Date().toISOString(),
+        };
+        need.updatedAt = new Date().toISOString();
+        this._saveLocal();
+        this._syncToSheets('quoteNeedUpdate', need);
+        return need.quotes[idx];
+    },
+
+    removeQuote(needId, quoteId) {
+        const need = this._cache.find(n => n.id === needId);
+        if (!need) return;
+        need.quotes = (need.quotes || []).filter(q => q.id !== quoteId);
+        need.updatedAt = new Date().toISOString();
+        this._saveLocal();
+        this._syncToSheets('quoteNeedUpdate', need);
+    },
+
+    selectQuote(needId, quoteId) {
+        const need = this._cache.find(n => n.id === needId);
+        if (!need) return;
+        need.quotes = (need.quotes || []).map(q => ({ ...q, selected: q.id === quoteId }));
+        need.status = 'scelto';
+        need.updatedAt = new Date().toISOString();
+        this._saveLocal();
+        this._syncToSheets('quoteNeedUpdate', need);
+    },
+
+    importData(data) {
+        this._cache = Array.isArray(data) ? data : [];
+        this._saveLocal();
+    },
+
+    exportData() {
+        return JSON.stringify(this._cache, null, 2);
+    },
+
+    _saveLocal() {
+        localStorage.setItem(this._key, JSON.stringify(this._cache));
+    },
+
+    async _syncToSheets(action, data) {
+        const settings = Settings.get();
+        if (!settings.apiUrl) return;
+        try {
+            await fetch(settings.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action,
+                    ...data,
+                    quotes: JSON.stringify(data.quotes || []),
+                }),
+            });
+            console.log('Sync preventivi tentato:', action);
+        } catch (e) {
+            console.error('Sync preventivi errore:', e);
+            toast('Errore sincronizzazione preventivi con Google Sheets', 'error');
+        }
+    },
 };
 
 // ═══════════════════════════════════════════
@@ -982,6 +1182,7 @@ const UI = {
         this._bindExpenseForm();
         this._bindScannerUI();
         this._bindHistoryUI();
+        this._bindQuotesUI();
         this._bindSettingsUI();
         this._bindMobileMenu();
         this._populateSelects();
@@ -1475,6 +1676,330 @@ const UI = {
         toast('CSV esportato!', 'success');
     },
 
+    // --- Quotes UI ---
+    _bindQuotesUI() {
+        $('#need-form')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const need = this._collectNeedForm();
+            if (!need.title) return;
+
+            if (need.id) {
+                QuoteStore.updateNeed(need);
+                toast('Bisogno aggiornato', 'success');
+            } else {
+                const created = QuoteStore.addNeed(need);
+                $('#quote-need').value = created.id;
+                toast('Bisogno creato', 'success');
+            }
+
+            this._resetNeedForm();
+            this._renderQuotes();
+        });
+
+        $('#quote-form')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const needId = $('#quote-need')?.value;
+            if (!needId) {
+                toast('Crea prima un bisogno', 'warning');
+                return;
+            }
+
+            const quote = this._collectQuoteForm();
+            if (quote.id) {
+                QuoteStore.updateQuote(needId, quote);
+                toast('Preventivo aggiornato', 'success');
+            } else {
+                QuoteStore.addQuote(needId, quote);
+                toast('Preventivo salvato', 'success');
+            }
+
+            this._resetQuoteForm(needId);
+            this._renderQuotes();
+        });
+
+        $('#reset-need-btn')?.addEventListener('click', () => this._resetNeedForm());
+        $('#reset-quote-btn')?.addEventListener('click', () => this._resetQuoteForm($('#quote-need')?.value));
+        $('#quote-search')?.addEventListener('input', () => this._renderQuotes());
+        $('#quote-status-filter')?.addEventListener('change', () => this._renderQuotes());
+
+        $('#export-quotes-btn')?.addEventListener('click', () => {
+            const blob = new Blob([QuoteStore.exportData()], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `preventivi_backup_${today()}.json`;
+            link.click();
+            toast('Preventivi esportati', 'success');
+        });
+
+        $('#import-quotes-btn')?.addEventListener('click', () => $('#import-quotes-input')?.click());
+        $('#import-quotes-input')?.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    QuoteStore.importData(data);
+                    toast(`Importati ${data.length} bisogni`, 'success');
+                    this._renderQuotes();
+                } catch (err) {
+                    toast('File preventivi non valido', 'error');
+                }
+            };
+            reader.readAsText(file);
+        });
+    },
+
+    _collectNeedForm() {
+        return {
+            id: $('#need-id')?.value || '',
+            title: $('#need-title')?.value.trim() || '',
+            area: $('#need-area')?.value || 'casa',
+            status: $('#need-status')?.value || 'valutazione',
+            budget: parseFloat($('#need-budget')?.value) || 0,
+            targetDate: $('#need-target-date')?.value || '',
+            notes: $('#need-notes')?.value || '',
+        };
+    },
+
+    _collectQuoteForm() {
+        return {
+            id: $('#quote-id')?.value || '',
+            supplier: $('#quote-supplier')?.value.trim() || '',
+            amount: parseFloat($('#quote-amount')?.value) || 0,
+            date: $('#quote-date')?.value || today(),
+            validUntil: $('#quote-valid-until')?.value || '',
+            quality: parseInt($('#quote-quality')?.value) || 3,
+            deliveryDays: parseInt($('#quote-delivery-days')?.value) || 0,
+            included: $('#quote-included')?.value || '',
+            excluded: $('#quote-excluded')?.value || '',
+            contact: $('#quote-contact')?.value || '',
+            status: $('#quote-status')?.value || 'ricevuto',
+            notes: $('#quote-notes')?.value || '',
+        };
+    },
+
+    _resetNeedForm() {
+        $('#need-form')?.reset();
+        if ($('#need-id')) $('#need-id').value = '';
+        if ($('#save-need-btn')) $('#save-need-btn').textContent = 'Salva bisogno';
+    },
+
+    _resetQuoteForm(needId = '') {
+        $('#quote-form')?.reset();
+        if ($('#quote-id')) $('#quote-id').value = '';
+        if ($('#quote-date')) $('#quote-date').value = today();
+        if ($('#quote-quality')) $('#quote-quality').value = '3';
+        if ($('#quote-need') && needId) $('#quote-need').value = needId;
+        if ($('#save-quote-btn')) $('#save-quote-btn').textContent = 'Salva preventivo';
+    },
+
+    _populateQuoteNeedSelect(needs) {
+        const select = $('#quote-need');
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = needs.length
+            ? needs.map(n => `<option value="${esc(n.id)}">${esc(n.title)}</option>`).join('')
+            : '<option value="">Crea prima un bisogno</option>';
+        if (needs.some(n => n.id === current)) select.value = current;
+    },
+
+    _bestQuoteForNeed(need) {
+        const available = (need.quotes || []).filter(q => q.status !== 'scartato');
+        if (!available.length) return null;
+        const selected = available.find(q => q.selected);
+        if (selected) return selected;
+        return [...available].sort((a, b) => (a.amount || 0) - (b.amount || 0))[0];
+    },
+
+    _renderQuoteSummary(needs) {
+        const openNeeds = needs.filter(n => n.status !== 'chiuso');
+        const quoteCount = needs.reduce((sum, n) => sum + (n.quotes || []).length, 0);
+        const budgetTotal = needs.reduce((sum, n) => sum + (Number(n.budget) || 0), 0);
+        const selectedTotal = needs.reduce((sum, n) => {
+            const best = this._bestQuoteForNeed(n);
+            return sum + (best ? Number(best.amount) || 0 : 0);
+        }, 0);
+        const delta = budgetTotal - selectedTotal;
+
+        if ($('#quote-stat-needs')) $('#quote-stat-needs').textContent = String(openNeeds.length);
+        if ($('#quote-stat-quotes')) $('#quote-stat-quotes').textContent = `${quoteCount} preventivi`;
+        if ($('#quote-stat-budget')) $('#quote-stat-budget').textContent = fmt(budgetTotal);
+        if ($('#quote-stat-selected')) $('#quote-stat-selected').textContent = fmt(selectedTotal);
+        if ($('#quote-stat-delta')) {
+            $('#quote-stat-delta').textContent = budgetTotal ? `${delta >= 0 ? 'Margine' : 'Extra'} ${fmt(Math.abs(delta))}` : 'Delta budget';
+            $('#quote-stat-delta').className = `stat-change ${delta >= 0 ? 'positive' : 'negative'}`;
+        }
+    },
+
+    _quoteScore(quote) {
+        const quality = Number(quote.quality) || 3;
+        const delivery = Number(quote.deliveryDays) || 0;
+        const amount = Number(quote.amount) || 0;
+        const preference = quote.status === 'preferito' ? 12 : 0;
+        return Math.round((quality * 18) + preference - (delivery * 0.15) - (amount / 1000));
+    },
+
+    _renderQuotes() {
+        const allNeeds = QuoteStore.getAll();
+        this._populateQuoteNeedSelect(allNeeds);
+        this._renderQuoteSummary(allNeeds);
+        this._resetQuoteForm($('#quote-need')?.value || allNeeds[0]?.id || '');
+
+        const status = $('#quote-status-filter')?.value || '';
+        const search = ($('#quote-search')?.value || '').toLowerCase();
+        let needs = allNeeds;
+
+        if (status) needs = needs.filter(n => n.status === status);
+        if (search) {
+            needs = needs.filter(n => {
+                const haystack = [
+                    n.title, n.area, n.status, n.notes,
+                    ...(n.quotes || []).flatMap(q => [q.supplier, q.status, q.included, q.excluded, q.notes, q.contact])
+                ].join(' ').toLowerCase();
+                return haystack.includes(search);
+            });
+        }
+
+        const list = $('#quotes-list');
+        if (!list) return;
+
+        if (!needs.length) {
+            list.innerHTML = '<div class="empty-state">Nessun bisogno o preventivo da mostrare.</div>';
+            return;
+        }
+
+        list.innerHTML = needs.map(need => {
+            const quotes = [...(need.quotes || [])].sort((a, b) => (a.amount || 0) - (b.amount || 0));
+            const best = this._bestQuoteForNeed(need);
+            const budgetDelta = need.budget && best ? need.budget - best.amount : 0;
+            const quoteRows = quotes.length ? quotes.map(q => `
+                <tr class="${q.selected ? 'selected-row' : ''}">
+                    <td>
+                        <strong>${esc(q.supplier)}</strong>
+                        ${q.id === best?.id ? '<span class="quote-badge best">Migliore stima</span>' : ''}
+                        ${q.selected ? '<span class="quote-badge selected">Scelto</span>' : ''}
+                        <small>${q.contact ? esc(q.contact) : ''}</small>
+                    </td>
+                    <td><strong>${fmt(q.amount)}</strong></td>
+                    <td>${esc(q.status || 'ricevuto')}</td>
+                    <td>${q.quality || 3}/5</td>
+                    <td>${q.deliveryDays ? `${q.deliveryDays} gg` : '-'}</td>
+                    <td>${q.validUntil ? new Date(q.validUntil).toLocaleDateString('it-IT') : '-'}</td>
+                    <td>
+                        <button class="action-btn" onclick="UI.editQuote('${need.id}','${q.id}')" title="Modifica">Modifica</button>
+                        <button class="action-btn" onclick="UI.chooseQuote('${need.id}','${q.id}')" title="Scegli">Scegli</button>
+                        <button class="action-btn" onclick="UI.deleteQuote('${need.id}','${q.id}')" title="Elimina">Elimina</button>
+                    </td>
+                </tr>
+                <tr class="quote-detail-row">
+                    <td colspan="7">
+                        <span><strong>Incluso:</strong> ${esc(q.included || '-')}</span>
+                        <span><strong>Escluso/rischi:</strong> ${esc(q.excluded || '-')}</span>
+                        <span><strong>Note:</strong> ${esc(q.notes || '-')}</span>
+                        <span><strong>Score:</strong> ${this._quoteScore(q)}</span>
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="7" class="empty-table">Aggiungi il primo preventivo per confrontare i fornitori.</td></tr>';
+
+            return `
+                <article class="quote-card">
+                    <div class="quote-card-header">
+                        <div>
+                            <div class="quote-title-row">
+                                <h3>${esc(need.title)}</h3>
+                                <span class="quote-status ${esc(need.status)}">${esc(need.status.replace('_', ' '))}</span>
+                            </div>
+                            <p>${esc(need.area)}${need.targetDate ? ' - target ' + new Date(need.targetDate).toLocaleDateString('it-IT') : ''}</p>
+                        </div>
+                        <div class="quote-card-actions">
+                            <button class="btn btn-ghost" onclick="UI.editNeed('${need.id}')">Modifica</button>
+                            <button class="btn btn-danger" onclick="UI.deleteNeed('${need.id}')">Elimina</button>
+                        </div>
+                    </div>
+                    <div class="quote-metrics">
+                        <span>Budget <strong>${fmt(need.budget || 0)}</strong></span>
+                        <span>Preventivi <strong>${quotes.length}</strong></span>
+                        <span>Stima <strong>${best ? fmt(best.amount) : '-'}</strong></span>
+                        <span class="${budgetDelta >= 0 ? 'positive-text' : 'negative-text'}">${need.budget && best ? (budgetDelta >= 0 ? 'Margine ' : 'Extra ') + fmt(Math.abs(budgetDelta)) : 'Delta n.d.'}</span>
+                    </div>
+                    ${need.notes ? `<div class="quote-notes">${esc(need.notes)}</div>` : ''}
+                    <div class="quote-table-wrap">
+                        <table class="quote-table">
+                            <thead>
+                                <tr>
+                                    <th>Fornitore</th>
+                                    <th>Importo</th>
+                                    <th>Stato</th>
+                                    <th>Qualita</th>
+                                    <th>Tempi</th>
+                                    <th>Validita</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>${quoteRows}</tbody>
+                        </table>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    },
+
+    editNeed(id) {
+        const need = QuoteStore.getAll().find(n => n.id === id);
+        if (!need) return;
+        $('#need-id').value = need.id;
+        $('#need-title').value = need.title || '';
+        $('#need-area').value = need.area || 'casa';
+        $('#need-status').value = need.status || 'valutazione';
+        $('#need-budget').value = need.budget || '';
+        $('#need-target-date').value = need.targetDate || '';
+        $('#need-notes').value = need.notes || '';
+        $('#save-need-btn').textContent = 'Aggiorna bisogno';
+        $('#need-title')?.focus();
+    },
+
+    deleteNeed(id) {
+        if (!confirm('Eliminare questo bisogno e tutti i suoi preventivi?')) return;
+        QuoteStore.removeNeed(id);
+        toast('Bisogno eliminato', 'warning');
+        this._renderQuotes();
+    },
+
+    editQuote(needId, quoteId) {
+        const need = QuoteStore.getAll().find(n => n.id === needId);
+        const quote = need?.quotes?.find(q => q.id === quoteId);
+        if (!quote) return;
+        $('#quote-need').value = needId;
+        $('#quote-id').value = quote.id;
+        $('#quote-supplier').value = quote.supplier || '';
+        $('#quote-amount').value = quote.amount || '';
+        $('#quote-date').value = quote.date || today();
+        $('#quote-valid-until').value = quote.validUntil || '';
+        $('#quote-quality').value = quote.quality || 3;
+        $('#quote-delivery-days').value = quote.deliveryDays || '';
+        $('#quote-included').value = quote.included || '';
+        $('#quote-excluded').value = quote.excluded || '';
+        $('#quote-contact').value = quote.contact || '';
+        $('#quote-status').value = quote.status || 'ricevuto';
+        $('#quote-notes').value = quote.notes || '';
+        $('#save-quote-btn').textContent = 'Aggiorna preventivo';
+        $('#quote-supplier')?.focus();
+    },
+
+    chooseQuote(needId, quoteId) {
+        QuoteStore.selectQuote(needId, quoteId);
+        toast('Preventivo segnato come scelto', 'success');
+        this._renderQuotes();
+    },
+
+    deleteQuote(needId, quoteId) {
+        if (!confirm('Eliminare questo preventivo?')) return;
+        QuoteStore.removeQuote(needId, quoteId);
+        toast('Preventivo eliminato', 'warning');
+        this._renderQuotes();
+    },
+
     // --- Settings UI ---
     _bindSettingsUI() {
         const saveBtn = $('#save-settings-btn');
@@ -1672,6 +2197,10 @@ const UI = {
                 Charts.renderWeekday(filtered);
                 this._renderInsights(filtered);
                 break;
+
+            case 'quotes':
+                this._renderQuotes();
+                break;
         }
     },
 };
@@ -1687,6 +2216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
         await DataStore.load();
+        await QuoteStore.load();
         toast('Dati caricati!', 'success');
     } catch (e) {
         console.error('Load error:', e);
