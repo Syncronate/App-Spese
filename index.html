@@ -20,7 +20,6 @@
                         class="nav-icon">📊</span><span>Dashboard</span></a>
                 <a href="#" class="nav-item" data-view="add"><span class="nav-icon">➕</span><span>Aggiungi
                         Spesa</span></a>
-                <a href="#" class="nav-item" data-view="scan"><span class="nav-icon">📷</span><span>Scontrino</span></a>
                 <a href="#" class="nav-item" data-view="history"><span
                         class="nav-icon">📋</span><span>Storico</span></a>
                 <a href="#" class="nav-item" data-view="analysis"><span
@@ -119,70 +118,29 @@
                         </div>
                         <div class="form-group"><label>Descrizione</label><input type="text" id="exp-description"
                                 placeholder="Es: Spesa settimanale"></div>
-                        <div class="form-group"><label>Negozio</label><input type="text" id="exp-store"
-                                placeholder="Es: Conad, Esselunga..."></div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Negozio</label><input type="text" id="exp-store"
+                                    placeholder="Es: Conad, Esselunga..."></div>
+                            <div class="form-group"><label>Link Ricevuta</label><input type="url" id="exp-receipt-link"
+                                    placeholder="URL ricevuta..."></div>
+                        </div>
                         <div class="form-group"><label>Note</label><textarea id="exp-notes" rows="2"></textarea></div>
                         <div class="items-section">
                             <h4>Dettaglio Articoli <button type="button" class="btn-sm" id="add-item-btn">+
                                     Articolo</button></h4>
+                            <div id="items-list-header" style="display: grid; grid-template-columns: 2fr 1fr 0.5fr 1fr 1fr auto; gap: 8px; margin-bottom: 4px; padding: 0 10px;">
+                                <small>Nome</small>
+                                <small>Categoria</small>
+                                <small>Q.tà</small>
+                                <small>Pr. Unitario</small>
+                                <small>Totale</small>
+                                <span></span>
+                            </div>
                             <div id="items-list"></div>
                         </div>
                         <div class="form-actions"><button type="submit" class="btn btn-primary">💾 Salva</button><button
                                 type="reset" class="btn btn-ghost">Reset</button></div>
                     </form>
-                </div>
-            </section>
-            <!-- SCAN -->
-            <section id="view-scan" class="view">
-                <div class="view-header">
-                    <h2>Scansiona Scontrino</h2>
-                </div>
-                <div class="scan-container">
-                    <div id="upload-zone" class="upload-zone">
-                        <span class="upload-icon">📷</span>
-                        <p>Trascina o clicca per caricare scontrino</p>
-                        <small>JPG, PNG • Puoi anche usare la fotocamera</small>
-                        <input type="file" id="scan-input" accept="image/*" capture="environment">
-                    </div>
-                    <div id="scan-preview" class="scan-preview" style="display:none">
-                        <img id="preview-img" src="" alt="">
-                        <div class="preview-actions"><button class="btn btn-primary" id="start-scan-btn">🔍
-                                Analizza</button><button class="btn btn-ghost" id="reset-scan-btn">↩ Cambia</button>
-                        </div>
-                    </div>
-                    <div id="scan-progress" style="display:none">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progress-fill"></div>
-                        </div>
-                        <p id="progress-text">Elaborazione...</p>
-                    </div>
-                    <div id="scan-results" style="display:none">
-                        <h3>Risultati</h3>
-                        <details class="ocr-raw-toggle">
-                            <summary>Testo grezzo OCR</summary>
-                            <pre id="ocr-text"></pre>
-                        </details>
-                        <div class="extracted-fields">
-                            <div class="form-row">
-                                <div class="form-group"><label>Negozio</label><input type="text" id="scan-store"></div>
-                                <div class="form-group"><label>Data</label><input type="date" id="scan-date"></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Totale €</label><input type="number" id="scan-total"
-                                        step="0.01"></div>
-                                <div class="form-group"><label>Persona</label><select id="scan-person">
-                                        <option value="comune">Conto Comune</option>
-                                        <option value="io">Alberto</option>
-                                        <option value="partner">Valentina</option>
-                                    </select></div>
-                            </div>
-                        </div>
-                        <h4>Articoli Trovati</h4>
-                        <div id="scan-items-list"></div>
-                        <div class="form-actions"><button class="btn btn-primary" id="save-scan-btn">💾 Salva
-                                Tutto</button><button class="btn btn-ghost" id="discard-scan-btn">✕ Annulla</button>
-                        </div>
-                    </div>
                 </div>
             </section>
             <!-- HISTORY -->
@@ -247,6 +205,23 @@
                     <div class="insight-card wide">
                         <h3>💡 Insights Automatici</h3>
                         <div id="insights-list"></div>
+                    </div>
+                    <div class="insight-card wide" id="item-stats-section">
+                        <h3>🛒 Dettagli Prodotti</h3>
+                        <div class="item-stats-grid">
+                            <div class="item-stat-col">
+                                <h4>Più Acquistati (Q.tà)</h4>
+                                <ul id="stats-items-qty" class="stats-items-list"></ul>
+                            </div>
+                            <div class="item-stat-col">
+                                <h4>Maggiore Spesa (€)</h4>
+                                <ul id="stats-items-spend" class="stats-items-list"></ul>
+                            </div>
+                            <div class="item-stat-col">
+                                <h4>Frequenza (Scontrini)</h4>
+                                <ul id="stats-items-freq" class="stats-items-list"></ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -436,6 +411,46 @@
             </form>
         </div>
     </div>
+
+    <!-- DETAIL MODAL -->
+    <div id="detail-modal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>Dettaglio Spesa</h3><button class="modal-close" id="detail-close-btn">&times;</button>
+            </div>
+            <div class="detail-body">
+                <div class="detail-info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                    <div><strong>ID:</strong> <span id="detail-id"></span></div>
+                    <div><strong>Data:</strong> <span id="detail-date"></span></div>
+                    <div><strong>Persona:</strong> <span id="detail-person"></span></div>
+                    <div><strong>Categoria:</strong> <span id="detail-category"></span></div>
+                    <div><strong>Negozio:</strong> <span id="detail-store"></span></div>
+                    <div><strong>Importo Totale:</strong> <span id="detail-amount"></span></div>
+                    <div style="grid-column: span 2;"><strong>Descrizione:</strong> <span id="detail-desc"></span></div>
+                    <div style="grid-column: span 2;"><strong>Note:</strong> <span id="detail-notes"></span></div>
+                    <div style="grid-column: span 2;" id="detail-link-container"><strong>Link Ricevuta:</strong> <a id="detail-link" href="#" target="_blank">Visualizza</a></div>
+                </div>
+
+                <h4>Articoli Acquistati</h4>
+                <div class="table-wrap">
+                    <table class="quote-table" id="detail-items-table">
+                        <thead>
+                            <tr>
+                                <th>Nome Articolo</th>
+                                <th>Categoria</th>
+                                <th>Quantità</th>
+                                <th>Prezzo Unit.</th>
+                                <th>Totale</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-items-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container"></div>
     <div id="loading-overlay" style="display:none">
         <div class="spinner"></div>

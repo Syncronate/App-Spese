@@ -169,6 +169,14 @@ const Settings = {
 const DataStore = {
     _cache: [],
 
+    // Generates REC-YYYYMMDD-XXXX
+    generateReceiptId() {
+        const d = new Date();
+        const dateStr = d.toISOString().split('T')[0].replace(/-/g, '');
+        const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `REC-${dateStr}-${randomStr}`;
+    },
+
     async load() {
         const settings = Settings.get();
         // Try Google Sheets first
@@ -177,17 +185,37 @@ const DataStore = {
                 const res = await fetch(settings.apiUrl + '?action=getAll');
                 const json = await res.json();
                 if (json.success) {
-                    this._cache = json.data.map(row => ({
-                        id: row[0],
-                        date: row[1],
-                        person: row[2],
-                        category: row[3],
-                        description: row[4],
-                        amount: parseFloat(row[5]),
-                        store: row[6] || '',
-                        notes: row[7] || '',
-                        items: row[8] ? JSON.parse(row[8]) : [],
-                    }));
+                    const itemsData = json.itemsData || [];
+
+                    this._cache = json.data.map(row => {
+                        const receiptId = row[0];
+                        // Find items for this receipt
+                        const receiptItems = itemsData
+                            .filter(itemRow => itemRow[1] === receiptId)
+                            .map(itemRow => ({
+                                id: itemRow[0],
+                                receiptId: itemRow[1],
+                                name: itemRow[2],
+                                category: itemRow[3],
+                                quantity: parseFloat(itemRow[4]) || 1,
+                                price: parseFloat(itemRow[5]) || 0,
+                                totalPrice: parseFloat(itemRow[6]) || 0
+                            }));
+
+                        return {
+                            id: receiptId,
+                            date: row[1],
+                            person: row[2],
+                            category: row[3],
+                            description: row[4],
+                            amount: parseFloat(row[5]) || 0,
+                            store: row[6] || '',
+                            notes: row[7] || '',
+                            receiptLink: row[8] || '',
+                            items: receiptItems,
+                        };
+                    });
+
                     // Sync to localStorage as backup
                     localStorage.setItem('spesa_data', JSON.stringify(this._cache));
                     return this._cache;
@@ -207,7 +235,24 @@ const DataStore = {
     },
 
     async add(expense) {
-        expense.id = expense.id || uid();
+        expense.id = expense.id || this.generateReceiptId();
+
+        // Ensure items have IDs and calculated totals
+        if (expense.items && expense.items.length > 0) {
+            expense.items = expense.items.map((item, index) => {
+                const quantity = parseFloat(item.quantity) || 1;
+                const price = parseFloat(item.price) || 0;
+                return {
+                    ...item,
+                    id: item.id || `${expense.id}-${String(index + 1).padStart(2, '0')}`,
+                    receiptId: expense.id,
+                    quantity,
+                    price,
+                    totalPrice: quantity * price
+                };
+            });
+        }
+
         this._cache.push(expense);
         this._saveLocal();
         await this._syncToSheets('add', expense);
@@ -237,20 +282,21 @@ const DataStore = {
         const settings = Settings.get();
         if (!settings.apiUrl) return;
         try {
+            const payload = {
+                action,
+                ...data,
+                items: JSON.stringify(data.items || [])
+            };
+
             const res = await fetch(settings.apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action, ...data, items: JSON.stringify(data.items || []) }),
+                body: JSON.stringify(payload),
             });
 
             if (!res.ok && res.status !== 0) { // status 0 can happen with redirects sometimes
                 throw new Error(`Server returned status ${res.status}`);
             }
-
-            // In Google Apps Script with web app, we might not get a success status back 
-            // easily due to redirects, but removing 'no-cors' allows us to see if the 
-            // request at least was attempted correctly. 
-            // Note: GAS prefers text/plain for POST to avoid pre-flight CORS checks in some cases.
 
             console.log('Sync tentato:', action);
         } catch (e) {
@@ -485,160 +531,6 @@ function categorizeItem(itemName) {
     }
     return bestCat;
 }
-
-// ═══════════════════════════════════════════
-//  OCR & RECEIPT PARSER
-// ═══════════════════════════════════════════
-
-const ReceiptScanner = {
-    async scan(imageSource) {
-        const progressFill = $('#progress-fill');
-        const progressText = $('#progress-text');
-        $('#scan-progress').style.display = 'block';
-        progressFill.style.width = '20%';
-        progressText.textContent = 'Invio a Gemini AI...';
-
-        try {
-            const settings = Settings.get();
-            if (!settings.apiUrl) {
-                toast('Configura l\'URL di Google Script nelle impostazioni', 'error');
-                return null;
-            }
-
-            // Extract base64 part
-            const base64 = imageSource.split(',')[1];
-
-            const response = await fetch(settings.apiUrl, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'scan',
-                    image: base64
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success && result.analysis && !result.analysis.error) {
-                progressFill.style.width = '100%';
-                progressText.textContent = 'Analisi completata!';
-                return {
-                    rawText: 'Analisi effettuata con successo tramite AI.',
-                    ...result.analysis
-                };
-            } else {
-                throw new Error(result.analysis?.error || 'Errore API Gemini');
-            }
-        } catch (err) {
-            console.error('Scan Error:', err);
-            toast(`Errore scansione: ${err.message}`, 'error');
-            return null;
-        }
-    },
-
-    parseReceipt(text) {
-        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-        const result = {
-            rawText: text,
-            store: this._extractStore(lines),
-            date: this._extractDate(text),
-            total: this._extractTotal(text),
-            items: this._extractItems(lines),
-        };
-        return result;
-    },
-
-    _extractStore(lines) {
-        // Store name is usually in the first 3-4 lines
-        const storePatterns = [
-            /conad/i, /esselunga/i, /coop/i, /lidl/i, /eurospin/i, /aldi/i,
-            /carrefour/i, /penny/i, /md\s/i, /pam/i, /despar/i, /spar/i,
-            /tigre/i, /sigma/i, /simply/i, /iper/i, /bennet/i, /famila/i,
-            /interspar/i, /todis/i, /prix/i, /auchan/i, /ipercoop/i,
-            /supermercato/i, /market/i, /discount/i, /alimentari/i,
-        ];
-        for (let i = 0; i < Math.min(5, lines.length); i++) {
-            for (const pat of storePatterns) {
-                if (pat.test(lines[i])) return lines[i];
-            }
-        }
-        // Return first non-empty, non-numeric line
-        for (let i = 0; i < Math.min(3, lines.length); i++) {
-            if (lines[i].length > 2 && !/^\d+$/.test(lines[i])) return lines[i];
-        }
-        return '';
-    },
-
-    _extractDate(text) {
-        // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
-        const m = text.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-        if (m) {
-            const day = m[1].padStart(2, '0');
-            const month = m[2].padStart(2, '0');
-            let year = m[3];
-            if (year.length === 2) year = '20' + year;
-            return `${year}-${month}-${day}`;
-        }
-        return today();
-    },
-
-    _extractTotal(text) {
-        // Look for TOTALE, TOT., TOTAL lines
-        const patterns = [
-            /totale\s*(?:eur|€|euro)?\s*[:\s]*(\d+[,\.]\d{2})/i,
-            /tot\.?\s*(?:eur|€|euro)?\s*[:\s]*(\d+[,\.]\d{2})/i,
-            /(?:eur|€)\s*(\d+[,\.]\d{2})\s*$/im,
-            /totale\s+(\d+[,\.]\d{2})/i,
-            /total[e]?\s*(\d+[,\.]\d{2})/i,
-        ];
-
-        for (const pat of patterns) {
-            const m = text.match(pat);
-            if (m) return parseFloat(m[1].replace(',', '.'));
-        }
-
-        // Last resort: find the largest number
-        const nums = [...text.matchAll(/(\d+[,\.]\d{2})/g)]
-            .map(m => parseFloat(m[1].replace(',', '.')))
-            .filter(n => n > 0 && n < 10000);
-        return nums.length ? Math.max(...nums) : 0;
-    },
-
-    _extractItems(lines) {
-        const items = [];
-        const priceRegex = /(\d+[,\.]\d{2})\s*[A-Z]?\s*$/;
-        const skipPatterns = [
-            /^totale/i, /^tot\./i, /^subtotale/i, /^contant/i,
-            /^resto/i, /^sconto/i, /^carta/i, /^bancomat/i,
-            /^iva/i, /^p\.iva/i, /^c\.f/i, /^scontrino/i,
-            /^grazie/i, /^arrivederci/i, /^num\./i, /^cassa/i,
-            /^euro\s/i, /^cambio/i, /^\d{1,2}[\/\-\.]\d{1,2}/,
-        ];
-
-        for (const line of lines) {
-            // Skip non-item lines
-            if (skipPatterns.some(p => p.test(line))) continue;
-            if (line.length < 4) continue;
-
-            const priceMatch = line.match(priceRegex);
-            if (priceMatch) {
-                const price = parseFloat(priceMatch[1].replace(',', '.'));
-                if (price > 0 && price < 1000) {
-                    let name = line.slice(0, priceMatch.index).trim();
-                    // Clean up: remove quantity info like "1 x", "KG 0.500"
-                    name = name.replace(/\d+\s*[xX]\s*/, '').replace(/KG\s*[\d,.]+/gi, '').trim();
-                    if (name.length > 1) {
-                        items.push({
-                            name: name,
-                            price: price,
-                            category: categorizeItem(name),
-                        });
-                    }
-                }
-            }
-        }
-        return items;
-    }
-};
 
 // ═══════════════════════════════════════════
 //  STATISTICS ENGINE
@@ -1180,7 +1072,6 @@ const UI = {
         this._bindPersonFilter();
         this._bindDateFilters();
         this._bindExpenseForm();
-        this._bindScannerUI();
         this._bindHistoryUI();
         this._bindQuotesUI();
         this._bindSettingsUI();
@@ -1315,14 +1206,22 @@ const UI = {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const items = this._collectItems('#items-list');
+
+                // Calculate total amount from items if not provided
+                let totalAmount = parseFloat($('#exp-amount').value);
+                if (isNaN(totalAmount) && items.length > 0) {
+                    totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+                }
+
                 const expense = {
                     date: $('#exp-date').value,
                     person: $('#exp-person').value,
                     category: $('#exp-category').value,
                     description: $('#exp-description').value,
-                    amount: parseFloat($('#exp-amount').value),
+                    amount: totalAmount || 0,
                     store: $('#exp-store').value,
                     notes: $('#exp-notes').value,
+                    receiptLink: $('#exp-receipt-link').value || '',
                     items: items,
                 };
 
@@ -1345,16 +1244,37 @@ const UI = {
 
         const row = document.createElement('div');
         row.className = 'item-row';
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = '2fr 1fr 0.5fr 1fr 1fr auto';
+        row.style.gap = '8px';
+        row.style.marginBottom = '8px';
+        row.style.alignItems = 'center';
+
         row.innerHTML = `
-            <input type="text" placeholder="Articolo" class="item-name" value="${data.name || ''}">
-            <input type="number" step="0.01" placeholder="€" class="item-price" value="${data.price || ''}">
+            <input type="text" placeholder="Articolo" class="item-name" value="${data.name || ''}" required>
             <select class="item-cat">
                 ${CATEGORIES.map(c => `<option value="${c.id}" ${c.id === (data.category || '') ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
             </select>
+            <input type="number" step="0.1" min="0.1" placeholder="Q.tà" class="item-qty" value="${data.quantity || 1}">
+            <input type="number" step="0.01" min="0" placeholder="€ Unit." class="item-price" value="${data.price || ''}">
+            <input type="text" placeholder="Tot" class="item-total" readonly disabled value="${(data.quantity && data.price) ? (data.quantity * data.price).toFixed(2) : ''}">
             <button type="button" class="item-remove" title="Rimuovi">✕</button>
         `;
 
         row.querySelector('.item-remove').addEventListener('click', () => row.remove());
+
+        const qtyInput = row.querySelector('.item-qty');
+        const priceInput = row.querySelector('.item-price');
+        const totalInput = row.querySelector('.item-total');
+
+        const calcTotal = () => {
+            const qty = parseFloat(qtyInput.value) || 0;
+            const price = parseFloat(priceInput.value) || 0;
+            totalInput.value = (qty * price).toFixed(2);
+        };
+
+        qtyInput.addEventListener('input', calcTotal);
+        priceInput.addEventListener('input', calcTotal);
 
         // Auto-categorize on name change
         const nameInput = row.querySelector('.item-name');
@@ -1370,148 +1290,16 @@ const UI = {
 
     _collectItems(containerSel) {
         const rows = $$(containerSel + ' .item-row');
-        return Array.from(rows).map(row => ({
-            name: row.querySelector('.item-name').value,
-            price: parseFloat(row.querySelector('.item-price').value) || 0,
-            category: row.querySelector('.item-cat').value,
-        })).filter(item => item.name);
-    },
-
-    // --- Scanner UI ---
-    _bindScannerUI() {
-        const fileInput = $('#scan-input');
-        const uploadZone = $('#upload-zone');
-        const previewSection = $('#scan-preview');
-        const previewImg = $('#preview-img');
-        const startBtn = $('#start-scan-btn');
-        const resetBtn = $('#reset-scan-btn');
-        const saveBtn = $('#save-scan-btn');
-        const discardBtn = $('#discard-scan-btn');
-
-        // Drag and drop
-        if (uploadZone) {
-            ['dragenter', 'dragover'].forEach(evt => {
-                uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-            });
-            ['dragleave', 'drop'].forEach(evt => {
-                uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.remove('drag-over'); });
-            });
-            uploadZone.addEventListener('drop', (e) => {
-                const file = e.dataTransfer.files[0];
-                if (file) this._handleScanFile(file);
-            });
-        }
-
-        if (fileInput) {
-            fileInput.addEventListener('change', () => {
-                if (fileInput.files[0]) this._handleScanFile(fileInput.files[0]);
-            });
-        }
-
-        if (startBtn) {
-            startBtn.addEventListener('click', async () => {
-                const result = await ReceiptScanner.scan(previewImg.src);
-                if (result) this._showScanResults(result);
-            });
-        }
-
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => this._resetScan());
-        }
-
-        if (saveBtn) {
-            saveBtn.addEventListener('click', async () => {
-                await this._saveScanResults();
-            });
-        }
-
-        if (discardBtn) {
-            discardBtn.addEventListener('click', () => this._resetScan());
-        }
-    },
-
-    _handleScanFile(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            $('#preview-img').src = e.target.result;
-            $('#upload-zone').style.display = 'none';
-            $('#scan-preview').style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-    },
-
-    _showScanResults(result) {
-        $('#scan-progress').style.display = 'none';
-        $('#scan-results').style.display = 'block';
-
-        $('#ocr-text').textContent = result.rawText;
-        $('#scan-store').value = result.store;
-        $('#scan-date').value = result.date;
-        $('#scan-total').value = result.total;
-
-        const list = $('#scan-items-list');
-        list.innerHTML = '';
-        result.items.forEach(item => {
-            const row = document.createElement('div');
-            row.className = 'scan-item-row';
-            row.innerHTML = `
-                <input type="text" class="item-name" value="${item.name}">
-                <input type="number" step="0.01" class="item-price" value="${item.price}">
-                <select class="item-cat">
-                    ${CATEGORIES.map(c => `<option value="${c.id}" ${c.id === item.category ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
-                </select>
-                <button type="button" class="item-remove" onclick="this.parentElement.remove()">✕</button>
-            `;
-            list.appendChild(row);
-        });
-    },
-
-    async _saveScanResults() {
-        const store = $('#scan-store').value;
-        const date = $('#scan-date').value || today();
-        const total = parseFloat($('#scan-total').value) || 0;
-        const person = $('#scan-person').value;
-
-        const itemRows = $$('#scan-items-list .scan-item-row');
-        const items = Array.from(itemRows).map(row => ({
-            name: row.querySelector('.item-name').value,
-            price: parseFloat(row.querySelector('.item-price').value) || 0,
-            category: row.querySelector('.item-cat').value,
-        })).filter(i => i.name);
-
-        // Determine main category from items
-        const catCounts = {};
-        items.forEach(i => { catCounts[i.category] = (catCounts[i.category] || 0) + i.price; });
-        const mainCat = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'altro';
-
-        const expense = {
-            date,
-            person,
-            category: mainCat,
-            description: `Scontrino ${store}`,
-            amount: total || items.reduce((s, i) => s + i.price, 0),
-            store,
-            notes: `${items.length} articoli scansionati`,
-            items,
-        };
-
-        showLoading(true);
-        await DataStore.add(expense);
-        showLoading(false);
-
-        toast(`Scontrino salvato! ${items.length} articoli registrati`, 'success');
-        this._resetScan();
-        this.refresh();
-    },
-
-    _resetScan() {
-        $('#upload-zone').style.display = '';
-        $('#scan-preview').style.display = 'none';
-        $('#scan-progress').style.display = 'none';
-        $('#scan-results').style.display = 'none';
-        $('#progress-fill').style.width = '0%';
-        $('#scan-input').value = '';
-        $('#scan-items-list').innerHTML = '';
+        return Array.from(rows).map(row => {
+            const qty = parseFloat(row.querySelector('.item-qty').value) || 1;
+            const price = parseFloat(row.querySelector('.item-price').value) || 0;
+            return {
+                name: row.querySelector('.item-name').value,
+                category: row.querySelector('.item-cat').value,
+                quantity: qty,
+                price: price,
+            };
+        }).filter(item => item.name);
     },
 
     // --- History UI ---
@@ -1586,13 +1374,13 @@ const UI = {
             const cat = getCatInfo(e.category);
             const personName = e.person === 'comune' ? 'Comune' : (e.person === 'io' ? settings.name1 : settings.name2);
             return `
-            <tr>
+            <tr style="cursor: pointer;" onclick="UI.showExpenseDetail('${e.id}')">
                 <td>${new Date(e.date).toLocaleDateString('it-IT')}</td>
                 <td><span class="person-badge ${e.person}">${personName}</span></td>
                 <td><span class="cat-badge">${cat.icon} ${cat.name}</span></td>
                 <td>${e.description || '-'}${e.store ? ` <small>(${e.store})</small>` : ''}</td>
                 <td><strong>${fmt(e.amount)}</strong></td>
-                <td>
+                <td onclick="event.stopPropagation()">
                     <button class="action-btn" onclick="UI.editExpense('${e.id}')" title="Modifica">✏️</button>
                     <button class="action-btn" onclick="UI.deleteExpense('${e.id}')" title="Elimina">🗑️</button>
                 </td>
@@ -1604,7 +1392,61 @@ const UI = {
         if (info) info.textContent = `${expenses.length} transazioni • Totale: ${fmt(total)}`;
     },
 
-    // --- Edit / Delete ---
+    // --- Detail / Edit / Delete ---
+    showExpenseDetail(id) {
+        const expense = DataStore.getAll().find(e => e.id === id);
+        if (!expense) return;
+
+        const settings = Settings.get();
+        const cat = getCatInfo(expense.category);
+        const personName = expense.person === 'comune' ? 'Conto Comune' : (expense.person === 'io' ? settings.name1 : settings.name2);
+
+        $('#detail-id').textContent = expense.id;
+        $('#detail-date').textContent = new Date(expense.date).toLocaleDateString('it-IT');
+        $('#detail-person').textContent = personName;
+        $('#detail-category').innerHTML = `${cat.icon} ${cat.name}`;
+        $('#detail-store').textContent = expense.store || '-';
+        $('#detail-amount').textContent = fmt(expense.amount);
+        $('#detail-desc').textContent = expense.description || '-';
+        $('#detail-notes').textContent = expense.notes || '-';
+
+        const linkContainer = $('#detail-link-container');
+        if (expense.receiptLink) {
+            linkContainer.style.display = 'block';
+            $('#detail-link').href = expense.receiptLink;
+        } else {
+            linkContainer.style.display = 'none';
+        }
+
+        const tbody = $('#detail-items-tbody');
+        if (expense.items && expense.items.length > 0) {
+            tbody.innerHTML = expense.items.map(item => {
+                const itemCat = getCatInfo(item.category);
+                const qty = parseFloat(item.quantity) || 1;
+                const price = parseFloat(item.price) || 0;
+                const total = parseFloat(item.totalPrice) || (qty * price);
+
+                return `
+                <tr>
+                    <td>${esc(item.name)}</td>
+                    <td>${itemCat.icon} ${itemCat.name}</td>
+                    <td>${qty}</td>
+                    <td>${fmt(price)}</td>
+                    <td><strong>${fmt(total)}</strong></td>
+                </tr>`;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-table">Nessun articolo registrato per questo scontrino.</td></tr>';
+        }
+
+        const modal = $('#detail-modal');
+        modal.classList.add('open');
+
+        const closeModal = () => modal.classList.remove('open');
+        $('#detail-close-btn').onclick = closeModal;
+        modal.querySelector('.modal-backdrop').onclick = closeModal;
+    },
+
     editExpense(id) {
         const expense = DataStore.getAll().find(e => e.id === id);
         if (!expense) return;
@@ -1617,6 +1459,8 @@ const UI = {
         $('#edit-description').value = expense.description || '';
         $('#edit-store').value = expense.store || '';
         $('#edit-notes').value = expense.notes || '';
+        // Note: For simplicity in edit modal, we aren't editing items directly here.
+        // Full edit including items should be done in the main Add view if needed.
 
         const modal = $('#edit-modal');
         modal.classList.add('open');
@@ -2149,7 +1993,7 @@ const UI = {
         }
     },
 
-    // --- Insights ---
+    // --- Insights & Item Stats ---
     _renderInsights(expenses) {
         const container = $('#insights-list');
         if (!container) return;
@@ -2165,6 +2009,78 @@ const UI = {
         if (!insights.length) {
             container.innerHTML = '<p style="color:var(--text-muted);padding:16px;">Aggiungi più dati per generare insights.</p>';
         }
+
+        this._renderItemStats(expenses);
+    },
+
+    _renderItemStats(expenses) {
+        // Collect all items
+        const allItems = [];
+        expenses.forEach(e => {
+            if (e.items && Array.isArray(e.items)) {
+                e.items.forEach(item => {
+                    allItems.push({
+                        ...item,
+                        receiptDate: e.date,
+                        normalizedName: (item.name || '').toLowerCase().trim()
+                    });
+                });
+            }
+        });
+
+        if (allItems.length === 0) {
+            $('#item-stats-section').style.display = 'none';
+            return;
+        }
+
+        $('#item-stats-section').style.display = 'block';
+
+        // Aggregate by normalized name
+        const itemStats = {};
+        allItems.forEach(item => {
+            const name = item.normalizedName;
+            if (!name) return;
+
+            if (!itemStats[name]) {
+                itemStats[name] = {
+                    originalName: item.name,
+                    category: item.category,
+                    totalQuantity: 0,
+                    totalSpend: 0,
+                    receiptIds: new Set()
+                };
+            }
+
+            itemStats[name].totalQuantity += (parseFloat(item.quantity) || 1);
+            itemStats[name].totalSpend += (parseFloat(item.totalPrice) || (item.quantity * item.price) || 0);
+            itemStats[name].receiptIds.add(item.receiptId);
+        });
+
+        const statsArray = Object.values(itemStats).map(s => ({
+            ...s,
+            frequency: s.receiptIds.size
+        }));
+
+        // Render top by quantity
+        const byQty = [...statsArray].sort((a, b) => b.totalQuantity - a.totalQuantity).slice(0, 5);
+        $('#stats-items-qty').innerHTML = byQty.map(s => {
+            const icon = getCatInfo(s.category).icon;
+            return `<li><span>${icon} ${esc(s.originalName)}</span> <span>${s.totalQuantity} pz</span></li>`;
+        }).join('');
+
+        // Render top by spend
+        const bySpend = [...statsArray].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 5);
+        $('#stats-items-spend').innerHTML = bySpend.map(s => {
+            const icon = getCatInfo(s.category).icon;
+            return `<li><span>${icon} ${esc(s.originalName)}</span> <span>${fmt(s.totalSpend)}</span></li>`;
+        }).join('');
+
+        // Render top by frequency
+        const byFreq = [...statsArray].sort((a, b) => b.frequency - a.frequency).slice(0, 5);
+        $('#stats-items-freq').innerHTML = byFreq.map(s => {
+            const icon = getCatInfo(s.category).icon;
+            return `<li><span>${icon} ${esc(s.originalName)}</span> <span>${s.frequency} volte</span></li>`;
+        }).join('');
     },
 
     // --- Main Refresh ---
