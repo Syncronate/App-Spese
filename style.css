@@ -1070,12 +1070,47 @@ textarea {
     font-size: 0.85rem;
 }
 
-/* ---------- INSIGHTS ---------- */
+/* ---------- INSIGHTS & ITEM STATS ---------- */
 .insight-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 24px;
+}
+
+.item-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.item-stat-col h4 {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+}
+
+.stats-items-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.stats-items-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.9rem;
+}
+
+.stats-items-list li:last-child {
+    border-bottom: none;
+}
+
+.stats-items-list li span:last-child {
+    font-weight: 600;
 }
 
 .insight-item {
