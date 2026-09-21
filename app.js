@@ -1205,6 +1205,13 @@ const UI = {
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+
+                const dateVal = $('#exp-date').value;
+                if (!dateVal || isNaN(new Date(dateVal).getTime())) {
+                    toast('Inserisci una data valida!', 'error');
+                    return;
+                }
+
                 const items = this._collectItems('#items-list');
 
                 // Calculate total amount from items if not provided
@@ -1473,7 +1480,14 @@ const UI = {
         // Save
         $('#edit-form').onsubmit = async (e) => {
             e.preventDefault();
-            expense.date = $('#edit-date').value;
+
+            const dateVal = $('#edit-date').value;
+            if (!dateVal || isNaN(new Date(dateVal).getTime())) {
+                toast('Inserisci una data valida!', 'error');
+                return;
+            }
+
+            expense.date = dateVal;
             expense.person = $('#edit-person').value;
             expense.category = $('#edit-category').value;
             expense.amount = parseFloat($('#edit-amount').value);
